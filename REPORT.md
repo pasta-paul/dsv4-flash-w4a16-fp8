@@ -171,3 +171,16 @@ Diagnosis: scale-tensor-not-sharded bug in `compressed_tensors_moe_wna16_marlin`
 The model checkpoint is correct, structurally complete, and produces matching-or-better quality than native FP4/FP8 baseline at TP=2. The Marlin scale-sharding bug at TP>2 is a separate vLLM issue (filed upstream) that doesn't affect TP=2 production deployment.
 
 Next: Phase 3b (full 1024-sample calibration) launching for upgraded artifact, swapping in for the dryrun on HF when complete.
+
+## Phase 4 — DGX Spark TP=2 deployment validation (2026-05-04)
+
+The Phase 3a tests above ran on 8× H200 (SM 9.0, single-machine TP=2 inside the DLAMI venv). Phase 4 deployed the same artifact onto the *original target topology*: two DGX Spark GB10 boxes (SM 12.1a, 121 GiB UMA each) running TP=2 over a QSFP RDMA direct-connect, packaged in the `eugr/spark-vllm-docker` toolchain.
+
+**Result**: 103 / 108 evaluated cases PASS across the public jasl harness (`run_acceptance.sh`), the original 13-prompt Spark validation harness, and 5 B200 oracle-alignment cases. Two configuration constraints surfaced and were resolved:
+
+1. **`--enforce-eager` is required** — without it, the per-rank attention workspace gets locked at the post-profile size and crashes on prompts >~1K tokens with `Workspace is locked but allocation requires X MB, current size is Y MB` from `deepseek_v4_attention.py:_forward_prefill`. Eager mode costs ~4× decode throughput (~3–4 tok/s vs ~14–15 tok/s) but lets every harness prompt size complete.
+2. **Worker rank 1 needs `--headless`** — without it, the worker tries to initialize its own engine and hits `AssertionError: collective_rpc should not be called on follower node` in `multiproc_executor.py`.
+
+Detailed results, B200 token-level alignment table, build provenance, and operational constraints are in **[`findings/spark_tp2_deployment.md`](findings/spark_tp2_deployment.md)**.
+
+This is the first end-to-end validation of `pastapaul/DeepSeek-V4-Flash-W4A16-FP8` on real DGX Spark hardware, not the H200 reference rig.
