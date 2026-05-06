@@ -1,0 +1,63 @@
+{
+  "started_utc": "2026-05-06T05:24:50Z",
+  "phases": [
+    {
+      "phase": "switch_canonical",
+      "boot_s": 306.5,
+      "ok": true
+    },
+    {
+      "phase": "benchmark_gsm8k",
+      "ok": true,
+      "task": "gsm8k",
+      "rc": 0,
+      "elapsed_s": 8485.4,
+      "raw_results": {
+        "alias": "gsm8k",
+        "exact_match,strict-match": 0.9499620924943138,
+        "exact_match_stderr,strict-match": 0.00600544235457774,
+        "exact_match,flexible-extract": 0.9492039423805914,
+        "exact_match_stderr,flexible-extract": 0.006048352096878102
+      },
+      "versions": {
+        "gsm8k": 3.0
+      }
+    },
+    {
+      "phase": "benchmark_humaneval",
+      "ok": true,
+      "task": "humaneval",
+      "rc": 0,
+      "elapsed_s": 1828.0,
+      "raw_results": {
+        "alias": "humaneval",
+        "pass@1,create_test": 0.4024390243902439,
+        "pass@1_stderr,create_test": 0.03841026959095088
+      },
+      "versions": {
+        "humaneval": 1.0
+      }
+    },
+    {
+      "phase": "benchmark_mmlu",
+      "ok": true,
+      "task": "mmlu",
+      "rc": 1,
+      "elapsed_s": 72.2
+    },
+    {
+      "phase": "benchmark_jasl_harness",
+      "ok": true,
+      "rc": 1,
+      "elapsed_s": 12822.8,
+      "stdout_tail": "_actual_top1_margin\": null, \"first_token_mismatch_oracle_actual_rank\": null, \"first_token_mismatch_actual_oracle_rank\": null, \"first_token_mismatch_topk_overlap\": null, \"first_token_mismatch_low_margin\": false, \"matching_prefix_tokens\": 16, \"oracle_token_count\": 16, \"actual_token_count\": 16, \"compared_steps\": 16, \"top1_matches\": 16, \"top1_match_rate\": 1.0, \"topk_overlap_mean\": 0.74375, \"topk_overlap_min\": 0.4, \"oracle_top1_margin_mean\": 4.468750033323886, \"oracle_top1_margin_min\": 0.0, \"actual_top1_margin_mean\": 4.140625008825737, \"actual_top1_margin_min\": 0.5, \"max_common_logprob_abs_error\": 3.234086036682129, \"mean_common_logprob_abs_error\": 0.6492193699682312, \"max_chosen_token_logprob_abs_error\": 0.6080975532531738, \"mean_chosen_token_logprob_abs_error\": 0.09983542978443438, \"ok\": true, \"round\": 1}\n{\"case\": \"completion_translation_logprobs20\", \"tokens_match\": false, \"prompt_token_ids_match\": true, \"first_token_mismatch\": {\"step\": 4, \"oracle\": \"\u63d0\u5347\", \"actual\": \"\u6539\u5584\"}, \"first_token_mismatch_oracle_top1_margin\": 0.25, \"first_token_mismatch_actual_top1_margin\": 0.5000000596046448, \"first_token_mismatch_oracle_actual_rank\": 3, \"first_token_mismatch_actual_oracle_rank\": 3, \"first_token_mismatch_topk_overlap\": 0.75, \"first_token_mismatch_low_margin\": true, \"matching_prefix_tokens\": 4, \"oracle_token_count\": 22, \"actual_token_count\": 128, \"compared_steps\": 22, \"top1_matches\": 5, \"top1_match_rate\": 0.22727272727272727, \"topk_overlap_mean\": 0.2681818181818182, \"topk_overlap_min\": 0.0, \"oracle_top1_margin_mean\": 3.1704545160517394, \"oracle_top1_margin_min\": 0.25, \"actual_top1_margin_mean\": 4.505859375922434, \"actual_top1_margin_min\": 0.0, \"max_common_logprob_abs_error\": 11.059804052114487, \"mean_common_logprob_abs_error\": 1.5161599949328082, \"max_chosen_token_logprob_abs_error\": 0.05267229489982128, \"mean_chosen_token_logprob_abs_error\": 0.017175831261556595, \"ok\": false, \"round\": 1}\nwrote /home/pcozz/vllm-ds4-sm120-harness/artifacts/sm12fix/2x_nvidia_gb10_tp2/20260506021642\n",
+      "artifact_root": "/home/pcozz/vllm-ds4-sm120-harness/artifacts/sm12fix/2x_nvidia_gb10_tp2/20260506021642"
+    }
+  ],
+  "chosen_canonical": {
+    "label": "256k_2seqs_graphs",
+    "max_model_len": 262144,
+    "max_num_seqs": 2
+  },
+  "finished_utc": "2026-05-06T12:50:25Z"
+}

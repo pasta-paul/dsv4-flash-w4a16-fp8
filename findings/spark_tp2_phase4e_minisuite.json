@@ -1,0 +1,141 @@
+{
+  "started_utc": "2026-05-06T05:01:21Z",
+  "configs": [
+    {
+      "label": "256k_2seqs_graphs",
+      "max_model_len": 262144,
+      "max_num_seqs": 2,
+      "enforce_eager": false,
+      "boot_s": 336.6,
+      "minisuite": {
+        "label": "256k_2seqs_graphs",
+        "rows": [
+          {
+            "category": "smoke",
+            "case": "math_7_times_8",
+            "ok": true,
+            "why": "expect '56' in content -> True",
+            "finish_reason": "stop",
+            "content_chars": 28,
+            "tool_calls": 0,
+            "elapsed_s": 4.2,
+            "completion_tokens": 43
+          },
+          {
+            "category": "smoke",
+            "case": "capital_of_france",
+            "ok": true,
+            "why": "expect 'Paris' in content -> True",
+            "finish_reason": "stop",
+            "content_chars": 31,
+            "tool_calls": 0,
+            "elapsed_s": 1.9,
+            "completion_tokens": 28
+          },
+          {
+            "category": "smoke",
+            "case": "spanish_greeting",
+            "ok": true,
+            "why": "expect any of ['Hola', 'hola'] -> True",
+            "finish_reason": "stop",
+            "content_chars": 43,
+            "tool_calls": 0,
+            "elapsed_s": 3.5,
+            "completion_tokens": 53
+          },
+          {
+            "category": "smoke",
+            "case": "openclaw_read_tool",
+            "ok": true,
+            "why": "got 1 tool_calls",
+            "finish_reason": "tool_calls",
+            "content_chars": 143,
+            "tool_calls": 1,
+            "elapsed_s": 15.8,
+            "completion_tokens": 151
+          },
+          {
+            "category": "generation",
+            "case": "en2zh_tech_001",
+            "mode": "non-thinking",
+            "ok": true,
+            "why": "702 >= 200",
+            "finish_reason": "stop",
+            "content_chars": 702,
+            "reasoning_chars": 0,
+            "elapsed_s": 35.3,
+            "completion_tokens": 422
+          },
+          {
+            "category": "generation",
+            "case": "en2zh_tech_001",
+            "mode": "think-high",
+            "ok": true,
+            "why": "754 >= 200",
+            "finish_reason": "stop",
+            "content_chars": 754,
+            "reasoning_chars": 288,
+            "elapsed_s": 45.4,
+            "completion_tokens": 612
+          },
+          {
+            "category": "generation",
+            "case": "en_wr_bus_001",
+            "mode": "non-thinking",
+            "ok": true,
+            "why": "5584 >= 500",
+            "finish_reason": "stop",
+            "content_chars": 5584,
+            "reasoning_chars": 0,
+            "elapsed_s": 70.5,
+            "completion_tokens": 1139
+          },
+          {
+            "category": "generation",
+            "case": "en_wr_bus_001",
+            "mode": "think-high",
+            "ok": true,
+            "why": "6422 >= 500",
+            "finish_reason": "stop",
+            "content_chars": 6422,
+            "reasoning_chars": 2462,
+            "elapsed_s": 102.4,
+            "completion_tokens": 1796
+          },
+          {
+            "category": "generation",
+            "case": "en_code_be_001",
+            "mode": "non-thinking",
+            "ok": true,
+            "why": "7942 >= 1000",
+            "finish_reason": "stop",
+            "content_chars": 7942,
+            "reasoning_chars": 0,
+            "elapsed_s": 129.1,
+            "completion_tokens": 2071
+          },
+          {
+            "category": "generation",
+            "case": "en_code_be_001",
+            "mode": "think-high",
+            "ok": true,
+            "why": "9142 >= 1000",
+            "finish_reason": "stop",
+            "content_chars": 9142,
+            "reasoning_chars": 4294,
+            "elapsed_s": 195.5,
+            "completion_tokens": 3284
+          }
+        ],
+        "pass_count": 10,
+        "total": 10
+      },
+      "ok": true
+    }
+  ],
+  "restore": {
+    "label": "no_restore_canonical_deferred",
+    "ok": true
+  },
+  "finished_utc": "2026-05-06T06:17:36Z"
+}

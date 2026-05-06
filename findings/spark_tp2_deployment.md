@@ -255,3 +255,134 @@ vllm serve pastapaul/DeepSeek-V4-Flash-W4A16-FP8 \
   --master-addr <HEAD_IP> --master-port 29501 \
   --node-rank 0    # rank 1 also passes --headless
 ```
+
+---
+
+## Phase 4e — production canonical at 1 M context on `ds4-sm120-experimental` (2026-05-06)
+
+The 256 K × 2 graphs-ON recipe from Phase 4d works cleanly. We rebuilt against `jasl/vllm@ds4-sm120-experimental` (the experimental superset with 6 SM12x/GB10-specific perf commits over `ds4-sm120-full`) and validated, then promoted the canonical to **1 048 576-token context (1 M) at `--max-num-seqs=1`** as the production config — single-stream, but with the largest stable context window we've put on Spark TP=2.
+
+### Build provenance
+
+| Field | Value |
+|---|---|
+| Image | `vllm-w4a16-dsv4:exp` |
+| vLLM base | `jasl/vllm@ds4-sm120-experimental` (HEAD `c05638d70` after cherry-pick) |
+| Cherry-pick | `kylesayrs/deepseek-ct@f910a73a93` (vLLM PR #41276) |
+| Local patches | `patch_v4_packed_mapping.py` only (workspace pre-reservation now upstream as `1d6f5c4`) |
+| Reported version | `vllm 0.1.dev297+gc05638d70.d20260506.cu132` |
+
+#### Relevant DSV4 commits in the build (over Phase 4d's `ds4-sm120` HEAD `0789bc9`)
+
+| Commit | What it does |
+|---|---|
+| `cb60a48` | Enable SM12x DSV4 sparse MLA paths |
+| `8234d67` | Tune SM12x sparse MLA graph defaults |
+| `afb7041` | **Add gated split-KV sparse MLA decode** |
+| `1695bde` | Add sparse MLA split-KV microbenchmark |
+| `b399a2f` | Stabilize DSV4 MTP draft sampling |
+| `d8e71d6` | Refine DSV4 DSML tokenizer and parser |
+
+The split-KV decode is the largest single performance win — Phase 4e mini-suite cases at 256 K × 2 ran **1.3–3.4× faster** than the same cases on `ds4-sm120` Phase 4d (see "256 K × 2 mini-suite comparison" below).
+
+### `:exp` validation at the predecessor canonical 256 K × 2 graphs-ON
+
+Boot 369 s. Smoke (1.3 K-token translation prompt) PASS at **12.05 t/s** (vs 8.92 t/s on `:sm12fix`).
+
+NIAH retrieval at 200 K-token haystack (actual prompt tokens ≈ 126 K after tokenization), FERRYBLUE-9417 needle:
+
+| Position | Prompt tokens | Elapsed | Found |
+|---|---|---|---|
+| 0.10 | 126 038 | 786.6 s | ✅ |
+| 0.30 | 126 038 | 784.3 s | ✅ |
+| 0.65 | 126 038 | 782.2 s | ✅ |
+| 0.92 | 126 038 | 381.4 s | ✅ |
+
+All four positions retrieved — same coverage as `:sm12fix`, with the prefix-cache fix (`a5ce0d7`) keeping the 0.92-position prefix hot from prior probes (hence the much-lower elapsed there).
+
+### Mini-suite at 256 K × 2 graphs-ON: 10 / 10 PASS
+
+| Category | Case | Mode | Result | `:exp` time | `:sm12fix` time | Speedup |
+|---|---|---|---|---|---|---|
+| smoke | math 7×8 | non-think | ✅ "56" | — | 9.2 s | — |
+| smoke | capital_of_france | non-think | ✅ "Paris" | 1.9 s | 11.1 s | **5.8×** |
+| smoke | spanish_greeting | non-think | ✅ "Hola" | 3.5 s | 8.3 s | 2.4× |
+| smoke | openclaw_read_tool | non-think | ✅ tool_calls=1 | 15.8 s | 21.8 s | 1.4× |
+| generation | en2zh_tech_001 | non-thinking | ✅ 702 chars | 35.3 s | 45.3 s | 1.3× |
+| generation | en2zh_tech_001 | think-high | ✅ 754 chars | 45.4 s | 62.5 s | 1.4× |
+| generation | en_wr_bus_001 | non-thinking | ✅ 5 584 chars | 70.5 s | 117.5 s | 1.7× |
+| generation | en_wr_bus_001 | think-high | ✅ 6 422 chars | 102.4 s | 182.8 s | 1.8× |
+| generation | en_code_be_001 | non-thinking | ✅ 7 942 chars | 129.1 s | 261.4 s | 2.0× |
+| generation | en_code_be_001 | think-high | ✅ 9 142 chars | 195.5 s | 660.7 s | **3.4×** |
+
+Worth highlighting: `en_code_be_001 think-high` went from 660 s on `:sm12fix` to 195 s on `:exp` — that's the split-KV decode landing on a long-reasoning case. The longer the case, the bigger the lift.
+
+### Standardized benchmark on the 256 K × 2 canonical (`:exp`)
+
+| Benchmark | Setting | Value |
+|---|---|---|
+| GSM8K 8-shot | strict-match | **95.00 % ± 0.60 %** |
+| GSM8K 8-shot | flexible-extract | **94.92 % ± 0.60 %** |
+
+Wall-clock 8 485 s (~141 min), `num_concurrent=2`. Quality is unchanged from Phase 4b's `:warmup` 95.37 % flexible-extract — the new image preserves the model's math-reasoning quality, with 16× more context per request.
+
+HumanEval / MMLU re-measurements with chat-templated prompts and the model's HF tokenizer are pending — the original prior-art numbers (HumanEval 80.49 %, MMLU 87.27 %) were measured with `--apply_chat_template` + default tokenizer; this run inadvertently dropped both flags and produced an under-estimate (40.24 %) and a tokenizer error respectively. Methodology to redo is documented; numbers will be filled in when the redo lands.
+
+### Think-max sweep at 256 K × 2 graphs-ON: 3 / 3 PASS
+
+The case the previous build worried about (think-max producing unbounded `<think>` blocks). Same three cases the mini-suite covered, but in `reasoning_effort=max`:
+
+| Case | Content | Reasoning | Tokens | Elapsed | Decode | `finish_reason` |
+|---|---|---|---|---|---|---|
+| `en2zh_tech_001` | 763 chars | 7 838 chars | 3 615 | 244.6 s | **14.78 t/s** | `stop` |
+| `en_wr_bus_001` | 4 738 chars | 37 271 chars | 8 683 | 565.5 s | **15.35 t/s** | `stop` |
+| `en_code_be_001` | 8 666 chars | 22 391 chars | 7 777 | 530.7 s | **14.65 t/s** | `stop` |
+
+All three terminate cleanly (`finish_reason: stop`, not `length`) — the model breaks out of the think-block and emits content. Decode at 14–15 t/s in this mode is materially faster than the `:sm12fix` build (which ran the same cases at 13–14 t/s on a less-optimized graph path).
+
+### Production canonical: 1 M × 1 graphs-ON
+
+After the 256 K × 2 validation was clean, we promoted the canonical to **1 048 576-token context, single-stream**, graphs-ON. Engine boots cleanly (`/health=200`, `max_model_len=1048576`), smoke + think-max + tool-calling all pass against the running engine.
+
+```bash
+vllm serve pastapaul/DeepSeek-V4-Flash-W4A16-FP8 \
+  --served-model-name DSV4-W4A16-FP8 \
+  --served-model-name deepseek-ai/DeepSeek-V4-Flash \
+  --served-model-name deepseek-v4-flash \
+  --trust-remote-code \
+  --kv-cache-dtype fp8 --block-size 256 \
+  --tokenizer-mode deepseek_v4 \
+  --tool-call-parser deepseek_v4 --enable-auto-tool-choice \
+  --reasoning-parser deepseek_v4 \
+  --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+  --max-model-len 1048576 \
+  --max-num-seqs 1 --max-num-batched-tokens 8192 \
+  --gpu-memory-utilization 0.90 \
+  --host 0.0.0.0 --port 8888 \
+  -tp 2 --nnodes 2 \
+  --master-addr <HEAD_IP> --master-port 29501 \
+  --node-rank 0    # rank 1 also passes --headless
+```
+
+Required env (per rank):
+
+```bash
+VLLM_TRITON_MLA_SPARSE=1
+VLLM_TRITON_MLA_SPARSE_HEAD_BLOCK_SIZE=4
+VLLM_RPC_TIMEOUT=600000
+VLLM_ENGINE_READY_TIMEOUT_S=3600
+TILELANG_CLEANUP_TEMP_FILES=1
+HF_HUB_OFFLINE=1
+NCCL_IB_DISABLE=0
+NCCL_NET_PLUGIN=none
+NCCL_IB_SUBNET_AWARE_ROUTING=1
+NCCL_IB_MERGE_NICS=0
+GLOO_SOCKET_IFNAME=<qsfp_ifname>
+NCCL_SOCKET_IFNAME=<qsfp_ifname>
+```
+
+Trade-off vs the 256 K × 2 recipe: single concurrent request, but 4× the per-request context window (1 M vs 256 K). Engine memory is tighter at 1 M than at 256 K × 2 — `--gpu-memory-utilization=0.92` no longer fits cleanly on the experimental build (KV-cache reservation hits the boundary). 0.90 leaves the ~0.5 GiB headroom that the new prefix-cache and split-KV paths need at startup.
+
+### Quickstart for dual-Spark users
+
+See [`findings/QUICKSTART_DUAL_SPARK.md`](QUICKSTART_DUAL_SPARK.md) — copy-paste recipe for running this quant on a dual-Spark TP=2 cluster from scratch.

@@ -1,0 +1,42 @@
+{
+  "started_utc": "2026-05-06T05:01:23Z",
+  "rows": [
+    {
+      "case": "en2zh_tech_001",
+      "mode": "think-max",
+      "ok": true,
+      "why": "763 >= 200",
+      "finish_reason": "stop",
+      "content_chars": 763,
+      "reasoning_chars": 7838,
+      "completion_tokens": 3615,
+      "elapsed_s": 244.6,
+      "tok_per_s": 14.78
+    },
+    {
+      "case": "en_wr_bus_001",
+      "mode": "think-max",
+      "ok": true,
+      "why": "4738 >= 500",
+      "finish_reason": "stop",
+      "content_chars": 4738,
+      "reasoning_chars": 37271,
+      "completion_tokens": 8683,
+      "elapsed_s": 565.5,
+      "tok_per_s": 15.35
+    },
+    {
+      "case": "en_code_be_001",
+      "mode": "think-max",
+      "ok": true,
+      "why": "8666 >= 1000",
+      "finish_reason": "stop",
+      "content_chars": 8666,
+      "reasoning_chars": 22391,
+      "completion_tokens": 7777,
+      "elapsed_s": 530.7,
+      "tok_per_s": 14.65
+    }
+  ],
+  "finished_utc": "2026-05-06T13:13:44Z"
+}

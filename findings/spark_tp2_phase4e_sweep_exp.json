@@ -1,0 +1,101 @@
+{
+  "started_utc": "2026-05-06T05:01:20Z",
+  "vllm_ref": "ds4-sm120-experimental",
+  "image_tag": "vllm-w4a16-dsv4:exp",
+  "phases": [
+    {
+      "phase": "cleanup",
+      "ok": true
+    },
+    {
+      "phase": "build_and_distribute",
+      "ok": true,
+      "s5_image": "vllm-w4a16-dsv4:exp 20.2GB",
+      "s6_image": "vllm-w4a16-dsv4:exp 20.2GB"
+    },
+    {
+      "phase": "256k_2seqs_graphs",
+      "max_model_len": 262144,
+      "max_num_seqs": 2,
+      "enforce_eager": false,
+      "boot_s": 368.9,
+      "smoke": {
+        "ok": true,
+        "elapsed_s": 36.8,
+        "tok_per_s": 12.05,
+        "completion_tokens": 444,
+        "finish_reason": "stop"
+      },
+      "probe": {
+        "label": "256k_2seqs_graphs",
+        "rc": 0,
+        "rows": [
+          {
+            "probe": "workspace_bomb",
+            "ok": true,
+            "prompt_tokens": 1204,
+            "completion_tokens": 966,
+            "elapsed_s": 81.6,
+            "tok_per_s": 11.84,
+            "finish_reason": "stop",
+            "content_first_120": "\u4ee5\u4e0b\u4e3a\u7ffb\u8bd1\u5185\u5bb9\uff1a\n\n\u534a\u6570\u7684\u5546\u4e1a\u4fe1\u51fd\u6839\u672c\u4e0d\u8be5\u5199\uff0c\u800c\u53e6\u4e00\u534a\u4e2d\u53c8\u6709\u592a\u591a\u4e0d\u5b8c\u6574\u6216\u8bed\u65e0\u4f26\u6b21\uff0c\u4ee5\u81f3\u4e8e\u539f\u672c\u4e24\u5c01\u4fe1\u5c31\u80fd\u5b8c\u6210\u5e76\u5f52\u6863\u7684\u4e00\u7b14\u4ea4\u6613\uff0c\u5f80\u5f80\u9700\u8981\u516d\u5230\u516b\u5c01\u4fe1\u624d\u80fd\u4e86\u7ed3\u3002\n\n\u4e00\u5c01\u5f97\u4f53\u7684\u4fe1\u51fd\u662f\u601d\u8def\u6e05\u6670\u4e0e\u7cbe\u5fc3\u7b79\u5212\u7684\u7ed3\u679c\u3002\u5c31\u9500\u552e\u4fe1\u800c\u8a00\uff0c\u6709\u65f6\u9700\u8981\u6570\u5468\u624d\u80fd\u5199\u5c31\u4e00\u5c01\uff1b\u4f46"
+          },
+          {
+            "probe": "throughput_200tok",
+            "ok": true,
+            "completion_tokens": 250,
+            "elapsed_s": 19.25,
+            "tok_per_s": 12.99
+          },
+          {
+            "probe": "niah",
+            "haystack_tokens": 200000,
+            "position": 0.1,
+            "ok": true,
+            "found": true,
+            "prompt_tokens": 126038,
+            "completion_tokens": 16,
+            "elapsed_s": 786.6,
+            "content_first_120": "The secret access code is **FERRYBLUE-9417**."
+          },
+          {
+            "probe": "niah",
+            "haystack_tokens": 200000,
+            "position": 0.3,
+            "ok": true,
+            "found": true,
+            "prompt_tokens": 126038,
+            "completion_tokens": 21,
+            "elapsed_s": 784.3,
+            "content_first_120": "Based on the document, the secret access code is **FERRYBLUE-9417**."
+          },
+          {
+            "probe": "niah",
+            "haystack_tokens": 200000,
+            "position": 0.65,
+            "ok": true,
+            "found": true,
+            "prompt_tokens": 126038,
+            "completion_tokens": 16,
+            "elapsed_s": 782.2,
+            "content_first_120": "The secret access code is **FERRYBLUE-9417**."
+          },
+          {
+            "probe": "niah",
+            "haystack_tokens": 200000,
+            "position": 0.92,
+            "ok": true,
+            "found": true,
+            "prompt_tokens": 126038,
+            "completion_tokens": 16,
+            "elapsed_s": 381.4,
+            "content_first_120": "The secret access code is **FERRYBLUE-9417**."
+          }
+        ],
+        "haystack_tokens": 200000
+      },
+      "ok": true
+    }
+  ],
+  "finished_utc": "2026-05-06T06:01:18Z"
+}
