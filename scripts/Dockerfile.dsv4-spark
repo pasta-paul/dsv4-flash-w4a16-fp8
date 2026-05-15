@@ -221,15 +221,19 @@ RUN if [ -n "$VLLM_PRS" ]; then \
         done; \
     fi
 
-# ---- DSV4 W4A16 build: kylesayrs PR #41276 cherry-pick + packed_modules_mapping ----
-# Per pasta-paul/dsv4-flash-w4a16-fp8 README: requires neuralmagic/vllm@kylesayrs/deepseek-ct
-# commit f910a73a93 cherry-picked into jasl tree, plus packed_modules_mapping injected into
-# DeepseekV4ForCausalLM (kylesayrs PR references self.packed_modules_mapping but does not define it).
+# ---- DSV4 W4A16 build: kylesayrs deepseek-ct vendored patch + packed_modules_mapping ----
+# Vendored from neuralmagic/vllm@kylesayrs/deepseek-ct, commit d09eeb498 ("support ct
+# quantization", Kyle Sayers, 2026-05-01). This is the rebased successor of f910a73a93,
+# which was force-pushed out of that branch's history (issue #1). We pin the patch CONTENT
+# rather than a moving SHA on someone else's working branch — see patches/VERSIONS.md.
+# packed_modules_mapping is still injected separately below because kylesayrs PR #41276
+# references self.packed_modules_mapping but does not define it.
+COPY kylesayrs-deepseek-ct.patch /tmp/kylesayrs-deepseek-ct.patch
 RUN git config --global user.email "builder@example.com" && \
     git config --global user.name "Docker Builder" && \
-    git remote add kylesayrs https://github.com/neuralmagic/vllm.git && \
-    git fetch --depth=200 kylesayrs kylesayrs/deepseek-ct && \
-    git cherry-pick f910a73a93
+    git apply --check /tmp/kylesayrs-deepseek-ct.patch && \
+    git am --keep-cr /tmp/kylesayrs-deepseek-ct.patch && \
+    rm /tmp/kylesayrs-deepseek-ct.patch
 
 COPY patch_v4_packed_mapping.py /tmp/patch_v4_packed_mapping.py
 RUN python3 /tmp/patch_v4_packed_mapping.py vllm/model_executor/models/deepseek_v4.py
