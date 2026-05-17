@@ -20,14 +20,14 @@
 #
 # What it does (in order):
 #   1. SSH-reachability check for both hosts
-#   2. Pre-download pastapaul/DeepSeek-V4-Flash-W4A16-FP8 on both (skip if cached)
+#   2. Pre-download pastapaul/DeepSeek-V4-Flash-W4A16-FP8 on both (always idempotent via huggingface-cli)
 #   3. Configure QSFP /30 on both (skippable)
 #   4. Build vllm-w4a16-dsv4:exp on the HEAD box (skippable; uses build-and-copy.sh)
 #   5. Distribute the image to WORKER (folded into step 4)
 #   6. Stop any existing vllm_node containers
 #   7. Launch worker rank 1 (--headless)
 #   8. Launch head rank 0
-#   9. Wait for /health=200, print smoke test command
+#   9. Wait for /health=200, print build provenance + smoke test command
 
 set -euo pipefail
 
@@ -77,6 +77,34 @@ DSV4_REPO_RAW="https://raw.githubusercontent.com/pasta-paul/dsv4-flash-w4a16-fp8
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
+# Failure diagnostics — called when a container exits before /health=200.
+# Dumps enough state for the user to file a useful bug report.
+dump_failure_diag() {
+  local which="$1"   # "head" or "worker"
+  local target_host
+  if [[ "$which" == "head" ]]; then target_host="$H"; else target_host="$W"; fi
+  echo ""
+  echo "================================================================"
+  echo "FAILURE DIAGNOSTICS — ${which} (${target_host})"
+  echo "================================================================"
+  echo "--- last 300 lines of vllm_node logs ---"
+  ssh $SSH_OPTS "$target_host" 'docker logs --tail 300 vllm_node 2>&1' || true
+  echo ""
+  echo "--- container env (VLLM_*, NCCL_*, TILELANG_*, HF_*, TORCH_*) ---"
+  ssh $SSH_OPTS "$target_host" "docker exec vllm_node sh -c 'env | grep -E \"^(VLLM|NCCL|TILELANG|HF|TORCH)_\" | sort' 2>/dev/null || \
+    docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' vllm_node 2>/dev/null | grep -E '^(VLLM|NCCL|TILELANG|HF|TORCH)_' | sort" || true
+  echo ""
+  echo "--- build provenance from image ---"
+  ssh $SSH_OPTS "$target_host" "docker run --rm --entrypoint cat ${IMAGE_TAG} /workspace/build-metadata.yaml 2>/dev/null || echo '(no build-metadata.yaml — image predates instrumentation)'" || true
+  echo ""
+  echo "--- nvidia-smi ---"
+  ssh $SSH_OPTS "$target_host" 'nvidia-smi 2>&1 | head -40' || true
+  echo ""
+  echo "--- dmesg tail (last 50 lines, may need sudo) ---"
+  ssh $SSH_OPTS "$target_host" 'sudo -n dmesg 2>/dev/null | tail -50 || dmesg 2>/dev/null | tail -50 || echo "(dmesg unavailable without sudo)"' || true
+  echo "================================================================"
+}
+
 # ---------------- 1. SSH reach ----------------
 log "[1/9] SSH reachability check..."
 ssh $SSH_OPTS "$H" 'true' || { echo "cannot SSH to head $H"; exit 3; }
@@ -84,19 +112,17 @@ ssh $SSH_OPTS "$W" 'true' || { echo "cannot SSH to worker $W"; exit 3; }
 log "  ok — both Sparks reachable"
 
 # ---------------- 2. Pre-download model ----------------
+# Always invoke huggingface-cli download — it's idempotent and resumes via xet.
+# The previous "is any .safetensors present?" gate passed on half-cached models
+# and produced engines that crashed in kernel warmup on corrupt KV-cache tensors.
 if [[ $SKIP_DOWNLOAD -eq 0 ]]; then
-  log "[2/9] Ensuring pastapaul/DeepSeek-V4-Flash-W4A16-FP8 is cached on both Sparks (~143 GiB)..."
+  log "[2/9] Ensuring pastapaul/DeepSeek-V4-Flash-W4A16-FP8 is fully cached on both Sparks (~143 GiB)..."
   for HOST in "$H" "$W"; do
     ssh $SSH_OPTS "$HOST" '
       set -e
-      MODEL_DIR="$HOME/.cache/huggingface/hub/models--pastapaul--DeepSeek-V4-Flash-W4A16-FP8"
-      if [[ -d "$MODEL_DIR/snapshots" ]] && find "$MODEL_DIR/snapshots" -name "*.safetensors" | head -1 | grep -q safetensors; then
-        echo "  [$(hostname)] already cached at $MODEL_DIR"
-      else
-        echo "  [$(hostname)] downloading..."
-        command -v huggingface-cli >/dev/null 2>&1 || pip install --quiet --user huggingface_hub
-        huggingface-cli download pastapaul/DeepSeek-V4-Flash-W4A16-FP8
-      fi
+      command -v huggingface-cli >/dev/null 2>&1 || pip install --quiet --user huggingface_hub
+      huggingface-cli download pastapaul/DeepSeek-V4-Flash-W4A16-FP8 >/dev/null
+      echo "  [$(hostname)] cache verified"
     '
   done
 else
@@ -125,7 +151,7 @@ fi
 
 # ---------------- 4+5. Build + distribute image ----------------
 if [[ $SKIP_BUILD -eq 0 ]]; then
-  log "[4-5/9] Building ${IMAGE_TAG} on ${HEAD_HOST} from jasl/vllm@${VLLM_REF} + cherry-pick + packed_modules patch..."
+  log "[4-5/9] Building ${IMAGE_TAG} on ${HEAD_HOST} from jasl/vllm@${VLLM_REF} + vendored kylesayrs patch + packed_modules patch..."
   log "        (~25-40 min on a Spark; image ships to worker via docker save | scp | docker load)"
   ssh $SSH_OPTS "$H" "
     set -e
@@ -139,9 +165,12 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
     fi
     cd spark-vllm-docker
 
-    # Pull our DSV4-specific Dockerfile + patch (the only files we override).
-    curl -fsSL -o Dockerfile        '${DSV4_REPO_RAW}/scripts/Dockerfile.dsv4-spark'
-    curl -fsSL -o patch_v4_packed_mapping.py '${DSV4_REPO_RAW}/scripts/patch_v4_packed_mapping.py'
+    # Pull our DSV4-specific Dockerfile + both patches that the Dockerfile expects
+    # to be in the build context. Without kylesayrs-deepseek-ct.patch the Dockerfile
+    # fails at the COPY step with 'kylesayrs-deepseek-ct.patch: not found' (HF #4).
+    curl -fsSL -o Dockerfile                  '${DSV4_REPO_RAW}/scripts/Dockerfile.dsv4-spark'
+    curl -fsSL -o kylesayrs-deepseek-ct.patch '${DSV4_REPO_RAW}/scripts/kylesayrs-deepseek-ct.patch'
+    curl -fsSL -o patch_v4_packed_mapping.py  '${DSV4_REPO_RAW}/scripts/patch_v4_packed_mapping.py'
 
     # Build + copy in one shot.
     ./build-and-copy.sh \
@@ -224,16 +253,30 @@ WAITED=0
 until ssh $SSH_OPTS "$H" "curl -sf http://localhost:8888/health > /dev/null"; do
   WAITED=$((WAITED + 30))
   if [[ $WAITED -gt 1800 ]]; then
-    echo "engine boot timeout — check 'docker logs vllm_node' on both hosts"
+    echo "engine boot timeout (30 min) — dumping diagnostics from both nodes:"
+    dump_failure_diag head
+    dump_failure_diag worker
     exit 5
   fi
-  STATE=$(ssh $SSH_OPTS "$H" 'docker inspect --format "{{.State.Status}}" vllm_node 2>/dev/null || echo missing')
-  if [[ "$STATE" == *exited* ]]; then
-    echo "engine container exited on head — last logs:"
-    ssh $SSH_OPTS "$H" "docker logs --tail 60 vllm_node 2>&1 | tail -60"
+  HEAD_STATE=$(ssh $SSH_OPTS "$H" 'docker inspect --format "{{.State.Status}}" vllm_node 2>/dev/null || echo missing')
+  WORKER_STATE=$(ssh $SSH_OPTS "$W" 'docker inspect --format "{{.State.Status}}" vllm_node 2>/dev/null || echo missing')
+  if [[ "$HEAD_STATE" == *exited* ]]; then
+    echo "engine container exited on head:"
+    dump_failure_diag head
+    echo ""
+    echo "(also dumping worker state for context — it may have died first and taken head with it)"
+    dump_failure_diag worker
     exit 6
   fi
-  log "  still booting (${WAITED}s elapsed, container=${STATE})..."
+  if [[ "$WORKER_STATE" == *exited* ]]; then
+    echo "engine container exited on worker:"
+    dump_failure_diag worker
+    echo ""
+    echo "(also dumping head state for context)"
+    dump_failure_diag head
+    exit 6
+  fi
+  log "  still booting (${WAITED}s elapsed, head=${HEAD_STATE}, worker=${WORKER_STATE})..."
   sleep 30
 done
 
@@ -246,6 +289,21 @@ log "  context:         ${MAX_MODEL_LEN} tokens, max-num-seqs=${MAX_NUM_SEQS}"
 log "  vllm ref:        jasl/vllm@${VLLM_REF}"
 log "  image:           ${IMAGE_TAG}"
 log "========================================================================"
+
+# Build provenance — write to a local file for bug reports, also print key fields.
+PROV_FILE="/tmp/dsv4-spark-build-metadata-$(date +%Y%m%d-%H%M%S).yaml"
+if ssh $SSH_OPTS "$H" "docker exec vllm_node cat /workspace/build-metadata.yaml" > "$PROV_FILE" 2>/dev/null && [[ -s "$PROV_FILE" ]]; then
+  log ""
+  log "Build provenance written to ${PROV_FILE}:"
+  sed 's/^/  /' "$PROV_FILE"
+  log ""
+  log "If you hit issues, please paste the contents of ${PROV_FILE} with your bug report."
+else
+  log ""
+  log "(no /workspace/build-metadata.yaml in this image — likely a pre-instrumentation build)"
+  rm -f "$PROV_FILE"
+fi
+
 log ""
 log "Smoke test:"
 log ""
